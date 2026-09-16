@@ -29,6 +29,13 @@ stateless container instances.
 - **CI/CD Pipeline**: GitHub → CodePipeline → CodeBuild → CodeDeploy →
   ECS (blue/green)
 
+## Authentication Flow
+
+The sequence diagram below shows how a login request flows through the system — from the ALB, through Cloud Map service discovery, to the Auth Service validating credentials against RDS.
+
+![Auth Flow Sequence Diagram](./auth-flow-sequence.png)
+
+
 ## Key AWS Services
 
 | Service | Role in this architecture |
