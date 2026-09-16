@@ -117,7 +117,3 @@ curl http://<alb_dns_name>/api/auth/register \
 - RDS and ElastiCache are single-AZ / single-node to keep this a learning
   build — add `multi_az = true` and Redis replicas for production use.
 
-## Live Demo (optional)
-
-- ALB endpoint: `http://<alb_dns_name>` *(resources may be torn down after
-  grading via `terraform destroy` to avoid ongoing cost)*
