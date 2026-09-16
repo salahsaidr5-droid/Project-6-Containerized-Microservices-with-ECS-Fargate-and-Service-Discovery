@@ -1,14 +1,61 @@
-# ECS Fargate Microservices — Terraform
+# Project 6: Containerized Microservices with ECS Fargate and Service Discovery
 
-Maps 1:1 to the architecture in the diagram (VPC with public/private-services/
-private-data subnets, ALB path routing, ECS Fargate + Cloud Map, Secrets
-Manager, ElastiCache Redis, CodePipeline/CodeBuild/CodeDeploy blue-green,
-X-Ray sidecar).
+**Architecture Category:** Containers
+**Author:** Salah Said
 
-## Layout
+## Description
+
+Migration of a monolithic Node.js application into three independent
+microservices — **Auth**, **Orders**, and **Notifications** — running on
+Amazon ECS Fargate. Services communicate with each other via **AWS Cloud
+Map** for DNS-based service discovery, while external traffic is routed
+through an **Application Load Balancer** with path-based routing. Secrets
+(DB credentials, API keys) are stored in **AWS Secrets Manager** and
+injected into containers at runtime rather than hardcoded. **CodePipeline**
+and **CodeDeploy** run blue/green deployments with automatic rollback on
+failure, and **ElastiCache Redis** provides a shared session store across
+stateless container instances.
+
+## Architecture Diagram
+
+![Architecture Diagram](architecture-diagram.png)
+
+- **Public Subnet**: Internet Gateway, NAT Gateway, ALB, Target Groups
+- **Private Subnet – Services**: ECS Cluster (Auth/Orders/Notifications
+  services), Cloud Map, X-Ray Daemon
+- **Private Subnet – Data**: Auth DB, Orders DB (RDS), ElastiCache Redis
+- **Secrets Manager & ECR Registry**: centralized secrets + private image
+  registry with scan-on-push
+- **CI/CD Pipeline**: GitHub → CodePipeline → CodeBuild → CodeDeploy →
+  ECS (blue/green)
+
+## Key AWS Services
+
+| Service | Role in this architecture |
+|---|---|
+| **ECS Fargate** | Runs the 3 microservices as serverless containers — task definitions, services, capacity providers |
+| **ECR** | Private container registry per service, with vulnerability scanning on push |
+| **ALB + Target Groups** | Path-based routing to microservices (e.g. `/api/orders/*`, `/api/auth/*`) |
+| **AWS Cloud Map** | Service discovery — containers find each other via DNS (`auth.ecs-microservices.local`) |
+| **Secrets Manager** | Injects DB credentials and app secrets into containers at runtime |
+| **ElastiCache (Redis)** | Shared session cache across stateless container instances |
+| **CodePipeline + CodeDeploy** | CI/CD with blue/green deployment and automatic rollback |
+| **X-Ray** | Distributed tracing across all three microservices with a service map |
+
+## Learning Outcomes
+
+- Built and pushed Docker images to ECR, configured ECS task definitions
+- Designed ECS Fargate services with correct IAM task roles and execution roles
+- Implemented service-to-service communication using Cloud Map DNS-based discovery
+- Configured ALB path-based routing rules to front multiple microservices
+- Set up blue/green deployments using CodeDeploy with ECS integration
+- Managed secrets securely with Secrets Manager, avoiding hardcoded credentials
+
+## Repository Structure
+
 ```
 versions.tf, variables.tf          provider + inputs
-vpc.tf, security_groups.tf         networking
+vpc.tf, security_groups.tf         networking (public/private-services/private-data subnets)
 ecr.tf                             3 ECR repos (scan on push)
 secrets.tf                         Secrets Manager (db creds + app secrets)
 rds.tf, elasticache.tf             Auth/Orders Postgres + shared Redis
@@ -19,20 +66,19 @@ ecs.tf                             cluster, task defs (+ X-Ray sidecar), service
 artifacts.tf                       S3 bucket for pipeline artifacts
 codebuild.tf, codedeploy.tf,
 codepipeline.tf                    CI/CD per service
-services/<name>/                   Dockerfile, buildspec.yml, taskdef.template.json, appspec.yml
+services/<name>/                   app code, Dockerfile, buildspec.yml, taskdef.template.json, appspec.yml
+docs/architecture-diagram.png      solution architecture diagram
 ```
 
-## First-time manual steps (can't be done by Terraform alone)
-1. **CodeStar Connection to GitHub**: create it once in the console
-   (Developer Tools → Settings → Connections → GitHub), approve the OAuth
-   install, copy the connection ARN into `terraform.tfvars`.
-2. Push a real Dockerfile per service (placeholders are in `services/*/Dockerfile`).
-3. `taskdef.template.json` under each service has placeholder role ARNs —
-   after your first `terraform apply`, run `terraform output ecs_execution_role_arn`
-   and `terraform output ecs_task_role_arns`, then fill those in (or template
-   them from a script before commit).
+## Deployment
 
-## Deploy
+### 1. Prerequisites
+- AWS account + AWS CLI configured
+- Terraform >= 1.6.0
+- A CodeStar Connection to GitHub (create once via AWS Console → Developer
+  Tools → Settings → Connections)
+
+### 2. Deploy the infrastructure
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in real values
 terraform init
@@ -40,19 +86,38 @@ terraform plan
 terraform apply
 ```
 
-## Notes / things worth knowing before you touch this in prod
-- `notifications` has no ALB rule (`path_pattern = ""`) — it's internal-only,
-  reachable via Cloud Map at `notifications.ecs-microservices.local`, and
-  deploys via plain ECS rolling update rather than CodeDeploy blue/green.
-- `auth` and `orders` get blue/green via CodeDeploy + two target groups
-  (blue/green) per service; Terraform intentionally stops managing
-  `task_definition`/`load_balancer` on the `aws_ecs_service` after first
-  apply (`lifecycle.ignore_changes`) so CodeDeploy can own deployments.
-- DB password is a plain sensitive variable here for simplicity — swap for
-  `random_password` + writing straight to Secrets Manager if you want
-  Terraform to never see a real password at all.
-- X-Ray daemon runs as a sidecar container in every task def (UDP 2000);
-  the app SDK inside each service must be configured to send segments to
-  `127.0.0.1:2000` (or `AWS_XRAY_DAEMON_ADDRESS` env var).
-- RDS/ElastiCache are single-AZ / single-node to keep this a learning
-  build — add `multi_az = true` and Redis replicas for anything real.
+### 3. Fill in task role ARNs
+After the first `terraform apply`, run:
+```bash
+terraform output ecs_execution_role_arn
+terraform output ecs_task_role_arns
+```
+Paste those into `services/auth/taskdef.template.json` and
+`services/orders/taskdef.template.json`, then push — this triggers the
+CodePipeline for each service automatically.
+
+### 4. Verify
+```bash
+curl http://<alb_dns_name>/api/auth/register \
+  -X POST -H "Content-Type: application/json" \
+  -d '{"email":"test@test.com","password":"123456"}'
+```
+
+## Notes
+
+- `notifications` is internal-only (no ALB rule) — reachable only via Cloud
+  Map at `notifications.ecs-microservices.local`, and deploys via plain ECS
+  rolling update rather than blue/green.
+- `auth` and `orders` use CodeDeploy blue/green with two target groups
+  (blue/green) each; Terraform stops managing `task_definition` and
+  `load_balancer` on the ECS service after first apply so CodeDeploy can
+  own deployments going forward.
+- X-Ray daemon runs as a sidecar in every task (UDP 2000); each service's
+  X-Ray SDK sends segments to `127.0.0.1:2000`.
+- RDS and ElastiCache are single-AZ / single-node to keep this a learning
+  build — add `multi_az = true` and Redis replicas for production use.
+
+## Live Demo (optional)
+
+- ALB endpoint: `http://<alb_dns_name>` *(resources may be torn down after
+  grading via `terraform destroy` to avoid ongoing cost)*
