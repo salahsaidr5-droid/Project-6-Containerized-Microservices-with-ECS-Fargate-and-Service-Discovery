@@ -124,3 +124,5 @@ curl http://<alb_dns_name>/api/auth/register \
 - RDS and ElastiCache are single-AZ / single-node to keep this a learning
   build — add `multi_az = true` and Redis replicas for production use.
 - DB credentials are injected as environment variables at task startup via Secrets Manager. The encryption key used to sign auth tokens is fetched via a runtime API call to Secrets Manager on each authentication request.
+
+* Infrastructure was deployed and verified successfully via `terraform apply`; the CI/CD pipeline (CodePipeline/CodeBuild) could not be fully exercised because the AWS account has a CodeBuild concurrent-build quota of 0 for all Linux compute environments (confirmed via `aws service-quotas list-service-quotas`) — this is an account-level restriction, not a code issue.
