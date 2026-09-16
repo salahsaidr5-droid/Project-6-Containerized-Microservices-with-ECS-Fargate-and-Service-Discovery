@@ -1,0 +1,32 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-8)
+  build:
+    commands:
+      - echo Building image for $SERVICE_NAME...
+      - docker build -t $ECR_REPO_URL:$IMAGE_TAG -f services/$SERVICE_NAME/Dockerfile services/$SERVICE_NAME
+      - docker tag $ECR_REPO_URL:$IMAGE_TAG $ECR_REPO_URL:latest
+  post_build:
+    commands:
+      - echo Pushing image...
+      - docker push $ECR_REPO_URL:$IMAGE_TAG
+      - docker push $ECR_REPO_URL:latest
+      - echo Writing CodeDeploy artifacts...
+      - >
+        printf '[{"name":"%s","imageUri":"%s"}]' "$SERVICE_NAME" "$ECR_REPO_URL:$IMAGE_TAG" > imagedefinitions.json
+      - >
+        printf '{"containerName":"%s","imageUri":"%s"}' "$SERVICE_NAME" "$ECR_REPO_URL:$IMAGE_TAG" > imageDetail.json
+      - sed -e "s|<IMAGE1_NAME>|$ECR_REPO_URL:$IMAGE_TAG|g" services/$SERVICE_NAME/taskdef.template.json > taskdef.json
+      - cp services/$SERVICE_NAME/appspec.yml appspec.yml
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - imageDetail.json
+    - taskdef.json
+    - appspec.yml

@@ -1,0 +1,13 @@
+aws_region   = "us-east-1"
+project_name = "ecs-microservices"
+environment  = "dev"
+
+db_username = "app_admin"
+db_password = "CHANGE_ME_use_TF_VAR_or_a_secrets_pipeline"
+
+github_repo   = "your-github-org/your-repo"
+github_branch = "main"
+
+# Create this once manually in the console (Developer Tools > Settings > Connections)
+# and approve the GitHub OAuth handshake, then paste the ARN here.
+codestar_connection_arn = "arn:aws:codestar-connections:us-east-1:123456789012:connection/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"

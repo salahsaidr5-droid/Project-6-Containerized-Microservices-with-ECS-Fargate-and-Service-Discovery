@@ -1,0 +1,28 @@
+{
+  "family": "ecs-microservices-auth",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "REPLACE_WITH_EXECUTION_ROLE_ARN_OUTPUT",
+  "taskRoleArn": "REPLACE_WITH_AUTH_TASK_ROLE_ARN_OUTPUT",
+  "containerDefinitions": [
+    {
+      "name": "auth",
+      "image": "<IMAGE1_NAME>",
+      "essential": true,
+      "portMappings": [{ "containerPort": 3000, "protocol": "tcp" }],
+      "environment": [
+        { "name": "SERVICE_NAME", "value": "auth" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/ecs-microservices-auth",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "auth"
+        }
+      }
+    }
+  ]
+}

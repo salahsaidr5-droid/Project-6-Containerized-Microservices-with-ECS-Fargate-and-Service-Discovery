@@ -1,0 +1,15 @@
+{
+  "name": "orders-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "redis": "^4.7.0",
+    "axios": "^1.7.4",
+    "aws-xray-sdk": "^3.9.0"
+  }
+}
